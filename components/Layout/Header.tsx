@@ -2,199 +2,196 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { usePWA } from '@/hooks/usePWA';
+import { IOSInstallModal } from '@/components/Modals/iOSInstallModal';
 
 export default function Header() {
-    const [mounted, setMounted] = useState(false);
-    const [midiStatus, setMidiStatus] = useState({
-        hasAccess: false,
-        error: null as string | null,
-    });
+    const pathname = usePathname();
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [midiStatus, setMidiStatus] = useState<'off' | 'connecting' | 'on'>('off');
+    const [midiAccess, setMidiAccess] = useState<any>(null);
 
-    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    // PWA Hook
+    const { canInstall, installApp, isIOS } = usePWA();
+    const [showIOSModal, setShowIOSModal] = useState(false);
 
-    // Only run on client
-    useEffect(() => {
-        setMounted(true);
-
-        // Check MIDI support
-        if (typeof navigator !== 'undefined' && typeof navigator.requestMIDIAccess === 'function') {
-            setMidiStatus({ hasAccess: true, error: null });
+    const handleInstallClick = () => {
+        if (isIOS) {
+            setShowIOSModal(true);
         } else {
-            setMidiStatus({
-                hasAccess: false,
-                error: 'WebMIDI not supported'
+            installApp();
+        }
+    };
+
+    // Auto-check MIDI permissions on mount
+    useEffect(() => {
+        if (typeof window !== 'undefined' && navigator.permissions) {
+            navigator.permissions.query({ name: 'midi' as any }).then((result) => {
+                if (result.state === 'granted') {
+                    handleMIDIConnect(); // Auto-connect if allowed
+                }
             });
         }
     }, []);
 
     const handleMIDIConnect = async () => {
+        setMidiStatus('connecting');
         try {
-            if (typeof navigator !== 'undefined' && typeof navigator.requestMIDIAccess === 'function') {
-                await navigator.requestMIDIAccess();
-                setMidiStatus({ hasAccess: true, error: null });
+            const access = await navigator.requestMIDIAccess();
+            setMidiAccess(access);
+
+            if (access.inputs.size > 0) {
+                setMidiStatus('on');
+            } else {
+                setMidiStatus('on'); // Still ON if access granted
             }
-        } catch (error) {
-            setMidiStatus({
-                hasAccess: false,
-                error: 'Failed to access MIDI'
-            });
+
+            access.onstatechange = (e) => {
+                // optional: update status on plug/unplug
+            };
+        } catch (err) {
+            console.error('MIDI Access Failed', err);
+            setMidiStatus('off');
         }
     };
 
     return (
-        <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
-            <div className="container mx-auto px-4 py-3">
-                <div className="flex items-center justify-between">
-                    {/* Logo */}
-                    <Link href="/" className="flex flex-col">
-                        <h1 className="text-xl md:text-2xl font-bold text-gray-800 cursor-pointer hover:text-blue-600 transition">
-                            🎼 Pentagramma
-                        </h1>
-                        <p className="text-xs text-gray-600 hidden sm:block">Interactive MIDI Piano Trainer</p>
-                    </Link>
+        <header className="bg-white shadow-sm sticky top-0 z-50">
+            <IOSInstallModal isOpen={showIOSModal} onClose={() => setShowIOSModal(false)} />
 
-                    {/* Desktop Navigation */}
-                    <nav className="hidden md:flex space-x-2">
-                        <Link href="/" className="px-3 py-2 text-gray-700 hover:bg-gray-100 rounded-md font-medium text-sm lg:text-base">
-                            Sight Reading
-                        </Link>
-                        <Link href="/challenge" className="px-3 py-2 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-md font-medium text-sm lg:text-base">
-                            Challenge
-                        </Link>
-                        <Link href="/rhythm" className="px-3 py-2 text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-md font-medium text-sm lg:text-base">
-                            Rhythm
-                        </Link>
-                        <Link href="/melodic-solfege" className="px-3 py-2 text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-md font-medium text-sm lg:text-base">
-                            Solfege
-                        </Link>
-                    </nav>
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="flex justify-between h-16 items-center">
 
-                    <div className="flex items-center gap-2">
-                        {/* Only render after mounting (prevents hydration error) */}
-                        {mounted && (
-                            <div className="hidden sm:flex items-center space-x-2">
-                                {!midiStatus.hasAccess ? (
-                                    <button
-                                        onClick={handleMIDIConnect}
-                                        className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-semibold"
-                                    >
-                                        Connect MIDI
-                                    </button>
-                                ) : (
-                                    <div className="px-3 py-1.5 bg-green-50 border border-green-200 rounded-lg">
-                                        <span className="text-green-700 text-sm font-medium">✓ MIDI Ready</span>
-                                    </div>
-                                )}
-                            </div>
+                    {/* Left: Logo & Nav */}
+                    <div className="flex items-center gap-4 md:gap-8">
+                        {/* Logo */}
+                        <div className="flex-shrink-0 flex items-center gap-3">
+                            <Link href="/">
+                                <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-amber-600 to-orange-500 cursor-pointer">
+                                    Solfeggio
+                                </span>
+                            </Link>
+
+                            {/* MOBILE ONLY: Install Button in Top Bar (Right of Logo) */}
+                            {canInstall && (
+                                <button
+                                    onClick={handleInstallClick}
+                                    className="md:hidden bg-amber-100 text-amber-700 hover:bg-amber-200 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 transition-colors animate-pulse-slow"
+                                >
+                                    <span>↓ App</span>
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Desktop Nav */}
+                        <nav className="hidden md:flex space-x-1">
+                            {[
+                                { name: 'Solfeggio Ritmico', href: '/' },
+                                { name: 'Lettura Musicale', href: '/sight-reading' },
+                                { name: 'Solfeggio Melodico', href: '/melodic-solfege' },
+                                { name: 'Challenge', href: '/challenge' }
+                            ].map(link => (
+                                <Link
+                                    key={link.href}
+                                    href={link.href}
+                                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${pathname === link.href
+                                        ? 'text-amber-600 bg-amber-50'
+                                        : 'text-gray-600 hover:text-amber-600 hover:bg-gray-50'
+                                        }`}
+                                >
+                                    {link.name}
+                                </Link>
+                            ))}
+                        </nav>
+                    </div>
+
+                    {/* Right: MIDI & Mobile Menu Button */}
+                    <div className="flex items-center gap-4">
+
+                        {/* DESKTOP ONLY: Install Button (Left of MIDI) */}
+                        {canInstall && (
+                            <button
+                                onClick={handleInstallClick}
+                                className="hidden md:flex bg-amber-600 hover:bg-amber-700 text-white px-4 py-1.5 rounded-full text-sm font-bold items-center gap-2 shadow-sm transition-transform hover:scale-105"
+                            >
+                                <span>Scarica l'App</span>
+                            </button>
                         )}
+
+                        {/* MIDI Status Indicator */}
+                        <button
+                            onClick={handleMIDIConnect}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${midiStatus === 'on'
+                                ? 'bg-green-50 border-green-200 text-green-700'
+                                : midiStatus === 'connecting'
+                                    ? 'bg-yellow-50 border-yellow-200 text-yellow-700'
+                                    : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'
+                                }`}
+                        >
+                            <span className={`w-2 h-2 rounded-full ${midiStatus === 'on' ? 'bg-green-500' : midiStatus === 'connecting' ? 'bg-yellow-400 animate-pulse' : 'bg-gray-400'
+                                }`} />
+                            {midiStatus === 'on' ? 'MIDI ON' : midiStatus === 'connecting' ? 'CONNECTING...' : 'MIDI OFF'}
+                        </button>
 
                         {/* Mobile Menu Button */}
                         <button
-                            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                            className="md:hidden p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+                            onClick={() => setIsMenuOpen(!isMenuOpen)}
+                            className="md:hidden p-2 rounded-md text-gray-600 hover:text-amber-600 hover:bg-gray-100 focus:outline-none"
                         >
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                {isMobileMenuOpen ? (
+                            <span className="sr-only">Open menu</span>
+                            {isMenuOpen ? (
+                                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                ) : (
+                                </svg>
+                            ) : (
+                                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                                )}
-                            </svg>
-                        </button>
-                        {/* Full Screen Toggle */}
-                        <button
-                            onClick={() => {
-                                if (!document.fullscreenElement) {
-                                    document.documentElement.requestFullscreen().catch(e => console.log(e));
-                                } else {
-                                    if (document.exitFullscreen) {
-                                        document.exitFullscreen();
-                                    }
-                                }
-                            }}
-                            className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 hidden sm:block"
-                            title="Toggle Full Screen"
-                        >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                            </svg>
+                                </svg>
+                            )}
                         </button>
                     </div>
                 </div>
+            </div>
 
-                {/* Mobile Navigation Menu */}
-                {isMobileMenuOpen && (
-                    <div className="md:hidden mt-4 pb-2 border-t border-gray-100 pt-4 space-y-2">
-                        <div className="flex flex-col space-y-2">
+            {/* Mobile Menu Dropdown */}
+            {isMenuOpen && (
+                <div className="md:hidden bg-white border-t border-gray-100 px-4 pt-2 pb-4 shadow-lg animate-slideDown">
+                    <div className="flex flex-col space-y-2">
+                        {[
+                            { name: 'Solfeggio Ritmico', href: '/' },
+                            { name: 'Lettura Musicale', href: '/sight-reading' },
+                            { name: 'Solfeggio Melodico', href: '/melodic-solfege' },
+                            { name: 'Challenge', href: '/challenge' }
+                        ].map(link => (
                             <Link
-                                href="/"
-                                onClick={() => setIsMobileMenuOpen(false)}
-                                className="px-4 py-3 bg-gray-50 text-gray-800 rounded-lg font-medium hover:bg-gray-100"
+                                key={link.href}
+                                href={link.href}
+                                onClick={() => setIsMenuOpen(false)}
+                                className={`block px-4 py-3 rounded-lg text-base font-medium ${pathname === link.href
+                                    ? 'bg-amber-50 text-amber-700'
+                                    : 'text-gray-700 hover:bg-gray-50'
+                                    }`}
                             >
-                                👁️ Sight Reading
+                                {link.name}
                             </Link>
-                            <Link
-                                href="/challenge"
-                                onClick={() => setIsMobileMenuOpen(false)}
-                                className="px-4 py-3 bg-blue-50 text-blue-700 rounded-lg font-medium hover:bg-blue-100"
-                            >
-                                ⚡ Challenge Mode
-                            </Link>
-                            <Link
-                                href="/rhythm"
-                                onClick={() => setIsMobileMenuOpen(false)}
-                                className="px-4 py-3 bg-amber-50 text-amber-700 rounded-lg font-medium hover:bg-amber-100"
-                            >
-                                🥁 Rhythm Mode
-                            </Link>
-                            <Link
-                                href="/melodic-solfege"
-                                onClick={() => setIsMobileMenuOpen(false)}
-                                className="px-4 py-3 bg-purple-50 text-purple-700 rounded-lg font-medium hover:bg-purple-100"
-                            >
-                                🎵 Melodic Solfege
-                            </Link>
+                        ))}
 
+                        {/* MOBILE MENU: Install Button Option */}
+                        {canInstall && (
                             <button
                                 onClick={() => {
-                                    if (!document.fullscreenElement) {
-                                        document.documentElement.requestFullscreen().catch(e => console.log(e));
-                                    } else {
-                                        if (document.exitFullscreen) {
-                                            document.exitFullscreen();
-                                        }
-                                    }
-                                    setIsMobileMenuOpen(false);
+                                    setIsMenuOpen(false);
+                                    handleInstallClick();
                                 }}
-                                className="px-4 py-3 bg-gray-50 text-gray-700 rounded-lg font-medium hover:bg-gray-100 text-left flex items-center w-full"
+                                className="w-full text-left px-4 py-3 rounded-lg text-base font-bold bg-amber-600 text-white hover:bg-amber-700 flex items-center gap-2 mt-4 shadow-md"
                             >
-                                <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                                </svg>
-                                Schermo Intero / Fullscreen
+                                <span>📥 Scarica l'App</span>
                             </button>
-                        </div>
-
-                        {/* Mobile MIDI Status */}
-                        {mounted && (
-                            <div className="pt-2">
-                                {!midiStatus.hasAccess ? (
-                                    <button
-                                        onClick={handleMIDIConnect}
-                                        className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold"
-                                    >
-                                        🎹 Connect MIDI Device
-                                    </button>
-                                ) : (
-                                    <div className="w-full px-4 py-3 bg-green-100 border border-green-200 rounded-lg text-center">
-                                        <span className="text-green-800 font-bold">✓ MIDI Connected</span>
-                                    </div>
-                                )}
-                            </div>
                         )}
                     </div>
-                )}
-            </div>
+                </div>
+            )}
         </header>
     );
-}
+};

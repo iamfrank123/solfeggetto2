@@ -51,19 +51,22 @@ export default function ScrollingStaff({
             const VF = Vex.Flow;
             const renderer = new VF.Renderer(renderDiv, VF.Renderer.Backends.SVG);
 
-            // Set dimensions to fit ~20 notes
-            const width = 2400;
+            // Create notes (take first 20)
+            const displayNotes = notes.slice(0, 20);
+
+            // Use dynamic width based on note count, but cap it or scale it
+            const noteSpacing = 120;
+            const contentWidth = Math.max(800, displayNotes.length * noteSpacing + 100);
             const height = 250;
-            renderer.resize(width, height);
+            renderer.resize(contentWidth, height);
 
             const context = renderer.getContext();
 
             // Create a stave
-            const stave = new VF.Stave(10, 40, width - 20);
+            const stave = new VF.Stave(10, 40, contentWidth - 20);
 
             // Force Treble clef as requested to prevent visual jumping
             const clef = 'treble';
-
             stave.addClef(clef);
 
             // Add key signature
@@ -73,9 +76,6 @@ export default function ScrollingStaff({
             stave.addKeySignature(keyStr);
 
             stave.setContext(context).draw();
-
-            // Create notes (take first 20)
-            const displayNotes = notes.slice(0, 20);
             const vfNotes = displayNotes.map(note => {
                 const accidentalStr = note.accidental === '#' ? '#' : note.accidental === 'b' ? 'b' : '';
                 const noteStr = `${note.note.toLowerCase()}${accidentalStr}/${note.octave}`;
@@ -99,7 +99,7 @@ export default function ScrollingStaff({
             voice.addTickables(vfNotes);
 
             // Format and draw
-            new Formatter().joinVoices([voice]).format([voice], width - 100);
+            new Formatter().joinVoices([voice]).format([voice], contentWidth - 100);
             voice.draw(context, stave);
 
             // Add smooth transition to the SVG for note movements
@@ -161,7 +161,7 @@ export default function ScrollingStaff({
                 <>
                     <div
                         ref={containerRef}
-                        className="flex justify-start items-center min-h-[250px] overflow-x-auto overflow-y-hidden border-2 border-gray-200 rounded-lg"
+                        className="flex justify-start items-center min-h-[250px] w-full overflow-x-auto overflow-y-hidden border-2 border-gray-200 rounded-lg"
                         style={{ maxWidth: '100%' }}
                     />
 
